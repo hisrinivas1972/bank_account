@@ -1,6 +1,5 @@
 import streamlit as st
 from datetime import datetime
-import io
 
 # -------------------- Session State Initialization --------------------
 if 'users_db' not in st.session_state:
@@ -47,30 +46,22 @@ def logout():
     st.session_state['login_time'] = None
     st.success("Logged out successfully.")
 
-def generate_transaction_statement(user):
-    lines = [
-        "Transaction Statement\n",
-        "Date    | Type     | Account       | Label                    |    Amount",
-        "---------------------------------------------------------------------------"
-    ]
-    for txn in reversed(user['transactions']):
-        dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
-        date_str = dt.strftime("%b %d")
+# -------------------- Format Transaction for Display --------------------
+def format_transaction(txn, account_number):
+    # Format date to 'Aug 22'
+    dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
+    date_str = dt.strftime("%b %d")
+    type_symbol = "●"
+    type_str = f"{type_symbol} {'Credit' if txn['type'] == 'credit' else 'Debit'}"
+    
+    # Amount with + or - sign
+    sign = "+" if txn['type'] == 'credit' else "-"
+    amount_str = f"{sign}${txn['amount']:.2f}"
 
-        type_icon = "●"
-        type_str = f"{type_icon} {txn['type'].capitalize()}"
-        sign = "+" if txn['type'] == "credit" else "-"
-        amount_str = f"{sign}${txn['amount']:.2f}"
-
-        label = txn['label']
-        if len(label) > 24:
-            label = label[:21] + "..."
-
-        # fixed width using format specifiers
-        line = f"{date_str:<7} | {type_str:<8} | {user['account_number']:<13} | {label:<25} | {amount_str:>10}"
-        lines.append(line)
-
-    return "\n".join(lines)
+    # Align fixed width fields:
+    # Date (7 chars), Type (9 chars), Account (13 chars), Label (24 chars), Amount (10 chars)
+    line = f"{date_str:<7}| {type_str:<9}| {account_number:<13}| {txn['label']:<24}| {amount_str:>10}"
+    return line
 
 # -------------------- Pages --------------------
 def register():
@@ -142,7 +133,7 @@ def user_dashboard():
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
 
     st.subheader("💰 Deposit")
-    deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01)
+    deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit")
     if st.button("Deposit"):
         user['balance'] += deposit
         user['transactions'].append({
@@ -154,7 +145,7 @@ def user_dashboard():
         st.success(f"${deposit:.2f} deposited successfully!")
 
     st.subheader("📤 Send Money")
-    recipient = st.text_input("Recipient Username")
+    recipient = st.text_input("Recipient Username", key="recipient")
     amount = st.number_input("Amount to send", min_value=0.01, step=0.01, key="send_amount")
     if st.button("Send"):
         if recipient not in st.session_state['users_db']:
@@ -168,7 +159,7 @@ def user_dashboard():
             user['transactions'].append({
                 "type": "debit",
                 "amount": amount,
-                "label": f"Sent to {recipient}",
+                "label": f"Sent to {recipient} ({st.session_state['users_db'][recipient]['account_number']})",
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             recipient_user = st.session_state['users_db'][recipient]
@@ -176,7 +167,7 @@ def user_dashboard():
             recipient_user['transactions'].append({
                 "type": "credit",
                 "amount": amount,
-                "label": f"Received from {st.session_state['username']}",
+                "label": f"Received from {st.session_state['username']} ({user['account_number']})",
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"${amount:.2f} sent to {recipient}.")
@@ -184,22 +175,37 @@ def user_dashboard():
     st.subheader("📜 Transaction History")
 
     if user['transactions']:
-        if st.button("Generate Statement"):
-            statement_text = generate_transaction_statement(user)
-            st.code(statement_text, language='plaintext')
-
-            # Create a download button for the statement
-            buffer = io.StringIO()
-            buffer.write(statement_text)
-            buffer.seek(0)
-            st.download_button(
-                label="Download Statement",
-                data=buffer,
-                file_name=f"transaction_statement_{user['account_number']}.txt",
-                mime="text/plain"
-            )
+        # Header
+        st.text("Date    | Type     | Account       | Label                    |    Amount")
+        st.text("---------------------------------------------------------------------------")
+        for txn in reversed(user['transactions']):
+            line = format_transaction(txn, user['account_number'])
+            st.text(line)
     else:
         st.info("No transactions yet.")
+
+    # Button to generate and download statement as text file
+    if st.button("Generate & Download Statement"):
+        # Build statement text
+        statement_lines = []
+        statement_lines.append("Transaction Statement\n")
+        statement_lines.append("Date    | Type     | Account       | Label                    |    Amount")
+        statement_lines.append("---------------------------------------------------------------------------")
+        for txn in reversed(user['transactions']):
+            statement_lines.append(format_transaction(txn, user['account_number']))
+        statement_text = "\n".join(statement_lines)
+        
+        # Show statement in text area
+        st.text_area("Transaction Statement", value=statement_text, height=300)
+
+        # Download button
+        st.download_button(
+            label="Download Statement",
+            data=statement_text,
+            file_name=f"transaction_statement_{user['account_number']}.txt",
+            mime="text/plain"
+        )
+
 
 def banker_dashboard():
     st.title("🏛️ Banker Dashboard - Overview")
@@ -215,12 +221,12 @@ def banker_dashboard():
 
             # Enrich label with account number
             if "to" in label:
-                recipient_username = label.split("to")[-1].strip()
+                recipient_username = label.split("to")[-1].strip().split()[0]
                 recipient_data = st.session_state['users_db'].get(recipient_username)
                 recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
                 label = f"Sent to {recipient_username} ({recipient_acc})"
             elif "from" in label:
-                sender_username = label.split("from")[-1].strip()
+                sender_username = label.split("from")[-1].strip().split()[0]
                 sender_data = st.session_state['users_db'].get(sender_username)
                 sender_acc = sender_data['account_number'] if sender_data else "N/A"
                 label = f"Received from {sender_username} ({sender_acc})"
@@ -242,30 +248,11 @@ def banker_dashboard():
     st.markdown("### 📜 All Transactions")
     if combined_transactions:
         combined_transactions.sort(key=lambda x: x["date"], reverse=True)
-        # Prepare and display table similarly formatted as user transactions
-
-        # Build lines for all transactions
-        lines = [
-            "Date    | Type     | Account       | Label                    |    Amount",
-            "---------------------------------------------------------------------------"
-        ]
+        st.text("Date    | Type     | Account       | Label                    |    Amount")
+        st.text("---------------------------------------------------------------------------")
         for txn in combined_transactions:
-            dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
-            date_str = dt.strftime("%b %d")
-
-            type_icon = "●"
-            type_str = f"{type_icon} {txn['type'].capitalize()}"
-            sign = "+" if txn['type'] == "credit" else "-"
-            amount_str = f"{sign}${txn['amount']:.2f}"
-
-            label = txn['label']
-            if len(label) > 24:
-                label = label[:21] + "..."
-
-            line = f"{date_str:<7} | {type_str:<8} | {txn['account_number']:<13} | {label:<25} | {amount_str:>10}"
-            lines.append(line)
-
-        st.code("\n".join(lines), language='plaintext')
+            line = format_transaction(txn, txn["account_number"])
+            st.text(f"{line} | User: {txn['username']} ({txn['account_number']})")
     else:
         st.info("No transactions.")
 
