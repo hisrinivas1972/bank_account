@@ -1,12 +1,25 @@
 import streamlit as st
 from datetime import date
 
-# In-memory user "database"
+# --- In-memory user "database" ---
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {}
 
+if 'mode' not in st.session_state:
+    st.session_state['mode'] = 'login'
+
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if 'username' not in st.session_state:
+    st.session_state['username'] = None
+
+if 'is_banker' not in st.session_state:
+    st.session_state['is_banker'] = False
+
+# --- Registration ---
 def register():
-    st.title("Bank of Tanakala - Register")
+    st.title("🏦 Bank of Tanakala - Register")
 
     username = st.text_input("Username", key="reg_username")
     password = st.text_input("Password", type="password", key="reg_password")
@@ -45,39 +58,49 @@ def register():
                 "balance": 0.0,
                 "transactions": []
             }
-            st.success("Registration successful! You can now login.")
+            st.success("✅ Registration successful! You can now log in.")
             st.session_state['mode'] = "login"
 
+# --- Login ---
 def login():
-    st.title("Bank of Tanakala - Login")
+    st.title("🏦 Bank of Tanakala - Login")
 
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
 
     if st.button("Sign In"):
-        if username in st.session_state['users_db'] and st.session_state['users_db'][username]['password'] == password:
-            st.success(f"Welcome, {username}!")
+        if username == "admin" and password == "admin123":
+            st.success("✅ Banker login successful!")
+            st.session_state['logged_in'] = True
+            st.session_state['username'] = "admin"
+            st.session_state['is_banker'] = True
+        elif username in st.session_state['users_db'] and st.session_state['users_db'][username]['password'] == password:
+            st.success(f"✅ Welcome, {username}!")
             st.session_state['logged_in'] = True
             st.session_state['username'] = username
+            st.session_state['is_banker'] = False
         else:
-            st.error("Invalid username or password")
+            st.error("❌ Invalid username or password")
 
+# --- User Dashboard ---
 def dashboard():
-    st.title(f"Welcome to Bank of Tanakala, {st.session_state['username']}")
+    st.title(f"💼 Account Dashboard - {st.session_state['username']}")
 
     user_data = st.session_state['users_db'][st.session_state['username']]
 
     st.subheader("Account Overview")
-    st.write(f"Balance: ${user_data['balance']:.2f}")
+    st.write(f"**Balance:** ${user_data['balance']:.2f}")
 
     st.subheader("Transaction History")
     if user_data['transactions']:
-        for txn in user_data['transactions']:
-            st.write(f"{txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
+        for txn in reversed(user_data['transactions']):
+            st.write(f"• {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
     else:
         st.write("No transactions yet.")
 
-    # --- Deposit Money ---
+    st.markdown("---")
+
+    # --- Deposit ---
     st.subheader("Deposit Money")
     deposit_amount = st.number_input("Amount to deposit", min_value=0.0, step=0.01, format="%.2f")
     if st.button("Deposit"):
@@ -88,7 +111,7 @@ def dashboard():
                 "amount": deposit_amount,
                 "label": "Deposit"
             })
-            st.success(f"Deposited ${deposit_amount:.2f} successfully!")
+            st.success(f"✅ Deposited ${deposit_amount:.2f} successfully!")
         else:
             st.error("Enter a valid deposit amount.")
 
@@ -106,14 +129,12 @@ def dashboard():
         elif user_data['balance'] < payment_amount:
             st.error("Insufficient balance.")
         else:
-            # Deduct from sender
             user_data['balance'] -= payment_amount
             user_data['transactions'].append({
                 "type": "debit",
                 "amount": payment_amount,
                 "label": f"Payment to {recipient}"
             })
-            # Add to recipient
             recipient_data = st.session_state['users_db'][recipient]
             recipient_data['balance'] += payment_amount
             recipient_data['transactions'].append({
@@ -121,31 +142,53 @@ def dashboard():
                 "amount": payment_amount,
                 "label": f"Received from {st.session_state['username']}"
             })
-            st.success(f"Sent ${payment_amount:.2f} to {recipient} successfully!")
+            st.success(f"✅ Sent ${payment_amount:.2f} to {recipient} successfully!")
 
     if st.button("Log out"):
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
+        st.session_state['is_banker'] = False
 
-# --- Main App Logic ---
-if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'
+# --- Banker Dashboard ---
+def banker_dashboard():
+    st.title("🏛️ Banker Dashboard - View All Users")
 
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-    st.session_state['username'] = None
+    if not st.session_state['users_db']:
+        st.info("No users registered yet.")
+        return
 
-# Navigation buttons
+    for user, data in st.session_state['users_db'].items():
+        st.subheader(f"👤 User: {user}")
+        st.write(f"Name: {data['first_name']} {data['last_name']}")
+        st.write(f"Balance: ${data['balance']:.2f}")
+        st.write("Transactions:")
+        if data['transactions']:
+            for txn in reversed(data['transactions']):
+                st.write(f"• {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
+        else:
+            st.write("No transactions.")
+        st.markdown("---")
+
+    if st.button("Log out"):
+        st.session_state['logged_in'] = False
+        st.session_state['username'] = None
+        st.session_state['is_banker'] = False
+
+# --- Navigation Buttons ---
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("Go to Login"):
+    if st.button("🔐 Go to Login"):
         st.session_state['mode'] = 'login'
 with col2:
-    if st.button("Go to Register"):
+    if st.button("📝 Go to Register"):
         st.session_state['mode'] = 'register'
 
+# --- Main ---
 if st.session_state['logged_in']:
-    dashboard()
+    if st.session_state['is_banker']:
+        banker_dashboard()
+    else:
+        dashboard()
 else:
     if st.session_state['mode'] == 'login':
         login()
