@@ -169,19 +169,36 @@ def banker_dashboard():
     total_balance = 0.0
     combined_transactions = []
 
-    # Aggregate balances and transactions from all users
     for username, data in st.session_state['users_db'].items():
         total_balance += data['balance']
+        account_number = data['account_number']
         for txn in data['transactions']:
+            label = txn["label"]
+
+            # Enrich label with account number
+            if "to" in label:
+                # Sent to someone
+                recipient_username = label.split("to")[-1].strip()
+                recipient_data = st.session_state['users_db'].get(recipient_username)
+                recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
+                label = f"Sent to {recipient_username} ({recipient_acc})"
+            elif "from" in label:
+                # Received from someone
+                sender_username = label.split("from")[-1].strip()
+                sender_data = st.session_state['users_db'].get(sender_username)
+                sender_acc = sender_data['account_number'] if sender_data else "N/A"
+                label = f"Received from {sender_username} ({sender_acc})"
+
             combined_transactions.append({
                 "username": username,
+                "account_number": account_number,
                 "date": txn["date"],
                 "type": txn["type"],
-                "label": txn["label"],
+                "label": label,
                 "amount": txn["amount"]
             })
 
-    # Display admin account summary
+    # Display bank (admin) summary
     st.markdown("### 👤 User: admin")
     st.markdown("**Name:** Bank of Tanakala")
     st.markdown("**Account Number:** BOT1001")
@@ -189,11 +206,10 @@ def banker_dashboard():
 
     st.markdown("### 📜 All Transactions")
     if combined_transactions:
-        # Sort transactions by date (descending)
         combined_transactions.sort(key=lambda x: x["date"], reverse=True)
         for txn in combined_transactions:
             st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | "
-                     f"${txn['amount']:.2f} | User: {txn['username']}")
+                     f"${txn['amount']:.2f} | User: {txn['username']} ({txn['account_number']})")
     else:
         st.info("No transactions.")
 # -------------------- Sidebar Logout --------------------
