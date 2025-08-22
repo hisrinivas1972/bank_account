@@ -1,7 +1,7 @@
 import streamlit as st
-from datetime import date
+from datetime import datetime, date
 
-# --- In-memory user "database" ---
+# --- Session state setup ---
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {}
 
@@ -89,34 +89,42 @@ def dashboard():
     user_data = st.session_state['users_db'][st.session_state['username']]
 
     st.subheader("Account Overview")
-    st.write(f"**Balance:** ${user_data['balance']:.2f}")
-
-    st.subheader("Transaction History")
-    if user_data['transactions']:
-        for txn in reversed(user_data['transactions']):
-            st.write(f"• {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
-    else:
-        st.write("No transactions yet.")
+    st.write(f"🔢 **Account Number:** 1011{hash(st.session_state['username']) % 10000000}")
+    st.write(f"💰 **Balance:** ${user_data['balance']:.2f}")
 
     st.markdown("---")
+    st.subheader("📜 Transaction History")
+    if user_data['transactions']:
+        txn_table = []
+        for txn in reversed(user_data['transactions']):
+            txn_table.append({
+                "Date": txn['date'],
+                "Type": txn['type'].capitalize(),
+                "Account": txn.get("account", "—"),
+                "Label": txn['label'],
+                "Amount": f"{'-' if txn['type']=='debit' else '+'}${txn['amount']:.2f}"
+            })
+        st.table(txn_table)
+    else:
+        st.info("No transactions yet.")
 
     # --- Deposit ---
-    st.subheader("Deposit Money")
-    deposit_amount = st.number_input("Amount to deposit", min_value=0.0, step=0.01, format="%.2f")
+    st.subheader("💵 Deposit Funds")
+    deposit_amount = st.number_input("Amount", min_value=0.0, step=0.01, format="%.2f")
     if st.button("Deposit"):
         if deposit_amount > 0:
             user_data['balance'] += deposit_amount
             user_data['transactions'].append({
                 "type": "credit",
                 "amount": deposit_amount,
-                "label": "Deposit"
+                "label": "Deposit",
+                "account": st.session_state['username'],
+                "date": datetime.now().strftime("%b %d")
             })
             st.success(f"✅ Deposited ${deposit_amount:.2f} successfully!")
-        else:
-            st.error("Enter a valid deposit amount.")
 
     # --- Send Payment ---
-    st.subheader("Send Payment")
+    st.subheader("💸 Send Payment")
     recipient = st.text_input("Recipient username")
     payment_amount = st.number_input("Amount to send", min_value=0.0, step=0.01, format="%.2f", key="payment_amount")
     if st.button("Send Payment"):
@@ -129,47 +137,62 @@ def dashboard():
         elif user_data['balance'] < payment_amount:
             st.error("Insufficient balance.")
         else:
+            # Sender
             user_data['balance'] -= payment_amount
             user_data['transactions'].append({
                 "type": "debit",
                 "amount": payment_amount,
-                "label": f"Payment to {recipient}"
+                "label": f"Payment to {recipient}",
+                "account": recipient,
+                "date": datetime.now().strftime("%b %d")
             })
+            # Recipient
             recipient_data = st.session_state['users_db'][recipient]
             recipient_data['balance'] += payment_amount
             recipient_data['transactions'].append({
                 "type": "credit",
                 "amount": payment_amount,
-                "label": f"Received from {st.session_state['username']}"
+                "label": f"Received from {st.session_state['username']}",
+                "account": st.session_state['username'],
+                "date": datetime.now().strftime("%b %d")
             })
             st.success(f"✅ Sent ${payment_amount:.2f} to {recipient} successfully!")
 
-    if st.button("Log out"):
+    st.markdown("---")
+    if st.button("🚪 Log out"):
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
         st.session_state['is_banker'] = False
 
 # --- Banker Dashboard ---
 def banker_dashboard():
-    st.title("🏛️ Banker Dashboard - View All Users")
+    st.title("🏛️ Banker Dashboard - User Overviews")
 
     if not st.session_state['users_db']:
         st.info("No users registered yet.")
         return
 
     for user, data in st.session_state['users_db'].items():
-        st.subheader(f"👤 User: {user}")
-        st.write(f"Name: {data['first_name']} {data['last_name']}")
-        st.write(f"Balance: ${data['balance']:.2f}")
-        st.write("Transactions:")
-        if data['transactions']:
-            for txn in reversed(data['transactions']):
-                st.write(f"• {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
-        else:
-            st.write("No transactions.")
-        st.markdown("---")
+        with st.expander(f"👤 {user.upper()} - {data['first_name']} {data['last_name']}"):
+            st.markdown(f"**Account Number:** 1011{hash(user) % 10000000}")
+            st.markdown(f"**Balance:** ${data['balance']:.2f}")
 
-    if st.button("Log out"):
+            st.markdown("### 📜 Transaction History")
+            if data['transactions']:
+                txn_table = []
+                for txn in reversed(data['transactions']):
+                    txn_table.append({
+                        "Date": txn['date'],
+                        "Type": txn['type'].capitalize(),
+                        "Account": txn.get("account", "—"),
+                        "Label": txn['label'],
+                        "Amount": f"{'-' if txn['type'] == 'debit' else '+'}${txn['amount']:.2f}"
+                    })
+                st.table(txn_table)
+            else:
+                st.info("No transactions.")
+
+    if st.button("🚪 Log out"):
         st.session_state['logged_in'] = False
         st.session_state['username'] = None
         st.session_state['is_banker'] = False
