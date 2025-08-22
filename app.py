@@ -31,12 +31,14 @@ if 'is_banker' not in st.session_state:
 if 'next_account_num' not in st.session_state:
     st.session_state['next_account_num'] = 1002  # start after BOT1001
 if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'  # default mode is login
+    st.session_state['mode'] = 'login'
+
 
 def generate_account_number():
     acc_num = f"BOT{st.session_state['next_account_num']}"
     st.session_state['next_account_num'] += 1
     return acc_num
+
 
 def register():
     st.title("Bank of Tanakala - Register")
@@ -84,12 +86,14 @@ def register():
             st.session_state['mode'] = "login"
             st.experimental_rerun()
 
+
 def login():
     st.title("Bank of Tanakala - Login")
 
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
 
+    login_success = False
     if st.button("Sign In"):
         if username in st.session_state['users_db'] and st.session_state['users_db'][username]['password'] == password:
             st.session_state['logged_in'] = True
@@ -97,9 +101,12 @@ def login():
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state['is_banker'] = (username == "admin")
             st.success(f"Welcome, {username}!")
-            st.experimental_rerun()
+            login_success = True
         else:
             st.error("Invalid username or password")
+    if login_success:
+        st.experimental_rerun()
+
 
 def user_dashboard():
     st.title(f"Welcome to Bank of Tanakala, {st.session_state['username']}")
@@ -168,6 +175,7 @@ def user_dashboard():
     else:
         st.write("No transactions yet.")
 
+
 def banker_dashboard():
     st.title("🏛️ Banker Dashboard - User Overviews")
     st.markdown(f"🕒 **Login Time:** {st.session_state.get('login_time', 'N/A')}")
@@ -187,9 +195,24 @@ def banker_dashboard():
         else:
             st.write("No transactions.")
 
+
 def logout_sidebar():
     if st.session_state.get('logged_in', False):
         with st.sidebar:
             st.markdown("## ⚙️ Settings")
             st.markdown(f"👤 Logged in as: `{st.session_state.get('username', '')}`")
-            st.markdown(f"🕒 Login time: `{st.session_state.get('login_time', 'N/A')}`
+            st.markdown(f"🕒 Login time: `{st.session_state.get('login_time', 'N/A')}`")
+            if st.button("🚪 Log Out"):
+                st.session_state['logged_in'] = False
+                st.session_state['username'] = None
+                st.session_state['is_banker'] = False
+                st.session_state['login_time'] = None
+                st.success("Logged out successfully.")
+                st.experimental_rerun()
+
+
+# Main app logic
+logout_sidebar()
+
+col1, col2 = st.columns(2)
+with col1:
