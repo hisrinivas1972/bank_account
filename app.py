@@ -46,23 +46,29 @@ def logout():
     st.session_state['login_time'] = None
     st.success("Logged out successfully.")
 
-def format_transaction(txn, account_number):
-    dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
-    date_str = dt.strftime("%b %d")
+# -------------------- Generate Statement Text --------------------
+def generate_transaction_statement(user):
+    lines = [
+        "Date    | Type     | Account       | Label                    |    Amount",
+        "---------------------------------------------------------------------------"
+    ]
+    for txn in reversed(user['transactions']):
+        dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
+        date_str = dt.strftime("%b %d")
 
-    type_icon = "●"
-    type_str = f"{type_icon} {txn['type'].capitalize()}"
-    sign = "+" if txn['type'] == "credit" else "-"
-    amount_str = f"{sign}${txn['amount']:.2f}"
+        type_icon = "●"
+        type_str = f"{type_icon} {txn['type'].capitalize()}"
+        sign = "+" if txn['type'] == "credit" else "-"
+        amount_str = f"{sign}${txn['amount']:.2f}"
 
-    # Truncate label to max 25 chars
-    label = txn['label']
-    if len(label) > 25:
-        label = label[:22] + "..."
+        label = txn['label']
+        if len(label) > 25:
+            label = label[:22] + "..."
 
-    # Format fixed-width columns
-    line = f"{date_str:<7} | {type_str:<8} | {account_number:<13} | {label:<25} | {amount_str:>10}"
-    return line
+        line = f"{date_str:<7} | {type_str:<8} | {user['account_number']:<13} | {label:<25} | {amount_str:>10}"
+        lines.append(line)
+
+    return "\n".join(lines)
 
 # -------------------- Pages --------------------
 def register():
@@ -129,7 +135,6 @@ def login():
 def user_dashboard():
     user = st.session_state['users_db'][st.session_state['username']]
     st.title(f"👋 Welcome, {user['first_name']} {user['last_name']}!")
-
     st.markdown(f"**Account Number:** `{user['account_number']}`")
     st.markdown(f"**Balance:** `${user['balance']:.2f}`")
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
@@ -147,13 +152,13 @@ def user_dashboard():
         st.success(f"${deposit:.2f} deposited successfully!")
 
     st.subheader("📤 Send Money")
-    # Dropdown with all users except self
-    recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
-    recipient = st.selectbox("Recipient Username", recipients)
+    recipient = st.text_input("Recipient Username")
     amount = st.number_input("Amount to send", min_value=0.01, step=0.01, key="send_amount")
     if st.button("Send"):
         if recipient not in st.session_state['users_db']:
             st.error("Recipient not found.")
+        elif recipient == st.session_state['username']:
+            st.error("You cannot send money to yourself.")
         elif user['balance'] < amount:
             st.error("Insufficient balance.")
         else:
@@ -176,11 +181,9 @@ def user_dashboard():
 
     st.subheader("📜 Transaction History")
     if user['transactions']:
-        lines = ["Date    | Type     | Account       | Label                    |    Amount",
-                 "-" * 75]
-        for txn in reversed(user['transactions']):
-            lines.append(format_transaction(txn, user['account_number']))
-        st.code("\n".join(lines))
+        if st.button("Generate Statement"):
+            statement_text = generate_transaction_statement(user)
+            st.text_area("Transaction Statement", statement_text, height=300)
     else:
         st.info("No transactions yet.")
 
@@ -198,13 +201,11 @@ def banker_dashboard():
 
             # Enrich label with account number
             if "to" in label:
-                # Sent to someone
                 recipient_username = label.split("to")[-1].strip()
                 recipient_data = st.session_state['users_db'].get(recipient_username)
                 recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
                 label = f"Sent to {recipient_username} ({recipient_acc})"
             elif "from" in label:
-                # Received from someone
                 sender_username = label.split("from")[-1].strip()
                 sender_data = st.session_state['users_db'].get(sender_username)
                 sender_acc = sender_data['account_number'] if sender_data else "N/A"
@@ -219,45 +220,46 @@ def banker_dashboard():
                 "amount": txn["amount"]
             })
 
-    # Display bank (admin) summary
     st.markdown("### 👤 User: admin")
     st.markdown("**Name:** Bank of Tanakala")
     st.markdown("**Account Number:** BOT1001")
     st.markdown(f"**Balance:** ${total_balance:.2f}")
 
     st.markdown("### 📜 All Transactions")
-
     if combined_transactions:
         combined_transactions.sort(key=lambda x: x["date"], reverse=True)
-        lines = ["Date    | Type     | Account       | Label                    |    Amount",
-                 "-" * 75]
         for txn in combined_transactions:
-            lines.append(format_transaction(txn, txn["account_number"]))
-        st.code("\n".join(lines))
+            st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | "
+                     f"${txn['amount']:.2f} | User: {txn['username']} ({txn['account_number']})")
     else:
         st.info("No transactions.")
 
-# -------------------- Main --------------------
-def main():
+# -------------------- Sidebar Logout --------------------
+def sidebar():
     st.sidebar.title("Bank of Tanakala")
-    if not st.session_state['logged_in']:
-        mode = st.sidebar.radio("Choose Option", ("Login", "Register"))
-        st.session_state['mode'] = mode.lower()
-
-        if st.session_state['mode'] == 'login':
-            login()
-        else:
-            register()
-    else:
+    if st.session_state['logged_in']:
         st.sidebar.write(f"Logged in as: {st.session_state['username']}")
         if st.sidebar.button("Logout"):
             logout()
-            return
+    else:
+        if st.sidebar.button("Go to Login"):
+            st.session_state['mode'] = 'login'
+        if st.sidebar.button("Go to Register"):
+            st.session_state['mode'] = 'register'
 
+# -------------------- Main App --------------------
+def main():
+    sidebar()
+    if st.session_state['logged_in']:
         if st.session_state['is_banker']:
             banker_dashboard()
         else:
             user_dashboard()
+    else:
+        if st.session_state['mode'] == 'login':
+            login()
+        elif st.session_state['mode'] == 'register':
+            register()
 
 if __name__ == "__main__":
     main()
