@@ -46,7 +46,7 @@ def logout():
     st.session_state['login_time'] = None
     st.success("Logged out successfully.")
 
-def format_transaction(txn, account_number):
+def format_transaction(txn, user_account_number):
     dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
     date_str = dt.strftime("%b %d")
 
@@ -55,12 +55,28 @@ def format_transaction(txn, account_number):
     sign = "+" if txn['type'] == "credit" else "-"
     amount_str = f"{sign}${txn['amount']:.2f}"
 
-    # Truncate label to max 25 chars
     label = txn['label']
+    account_number = user_account_number  # Default: user's account
+
+    # Extract counterparty account number based on label and transaction type
+    if txn['type'] == 'debit' and "Sent to" in label:
+        # For debits, show recipient's account number
+        recipient_username = label.split("Sent to")[-1].strip().split()[0]
+        recipient_data = st.session_state['users_db'].get(recipient_username)
+        if recipient_data:
+            account_number = recipient_data['account_number']
+
+    elif txn['type'] == 'credit' and "Received from" in label:
+        # For credits, show sender's account number
+        sender_username = label.split("Received from")[-1].strip().split()[0]
+        sender_data = st.session_state['users_db'].get(sender_username)
+        if sender_data:
+            account_number = sender_data['account_number']
+
+    # Truncate label to max 25 chars
     if len(label) > 25:
         label = label[:22] + "..."
 
-    # Format fixed-width columns
     line = f"{date_str:<7} | {type_str:<8} | {account_number:<13} | {label:<25} | {amount_str:>10}"
     return line
 
@@ -149,10 +165,17 @@ def user_dashboard():
     st.subheader("📤 Send Money")
     # Dropdown with all users except self
     recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
-    recipient = st.selectbox("Recipient Username", recipients)
+    if recipients:
+        recipient = st.selectbox("Recipient Username", recipients)
+    else:
+        st.info("No other users to send money to.")
+        recipient = None
+
     amount = st.number_input("Amount to send", min_value=0.01, step=0.01, key="send_amount")
     if st.button("Send"):
-        if recipient not in st.session_state['users_db']:
+        if recipient is None:
+            st.error("No recipients available.")
+        elif recipient not in st.session_state['users_db']:
             st.error("Recipient not found.")
         elif user['balance'] < amount:
             st.error("Insufficient balance.")
