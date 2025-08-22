@@ -1,7 +1,7 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime
 
-# Initialize session state keys and defaults
+# Initialize session state keys
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {
         "admin": {
@@ -30,10 +30,8 @@ if 'is_banker' not in st.session_state:
     st.session_state['is_banker'] = False
 if 'next_account_num' not in st.session_state:
     st.session_state['next_account_num'] = 1002  # start after BOT1001
-if 'rerun_needed' not in st.session_state:
-    st.session_state['rerun_needed'] = False
 if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'  # start at login mode
+    st.session_state['mode'] = 'login'  # default to login
 
 def generate_account_number():
     acc_num = f"BOT{st.session_state['next_account_num']}"
@@ -84,7 +82,11 @@ def register():
             }
             st.success(f"Registration successful! Your account number is {account_number}. You can now login.")
             st.session_state['mode'] = "login"
-            st.session_state['rerun_needed'] = True
+            st.experimental_rerun()
+
+    if st.button("Back to Login"):
+        st.session_state['mode'] = "login"
+        st.experimental_rerun()
 
 def login():
     st.title("Bank of Tanakala - Login")
@@ -99,9 +101,13 @@ def login():
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state['is_banker'] = (username == "admin")
             st.success(f"Welcome, {username}!")
-            st.session_state['rerun_needed'] = True
+            st.experimental_rerun()
         else:
             st.error("Invalid username or password")
+
+    if st.button("Register New Account"):
+        st.session_state['mode'] = "register"
+        st.experimental_rerun()
 
 def user_dashboard():
     st.title(f"Welcome to Bank of Tanakala, {st.session_state['username']}")
@@ -126,7 +132,7 @@ def user_dashboard():
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Deposited ${deposit_amount:.2f} successfully!")
-            st.session_state['rerun_needed'] = True
+            st.experimental_rerun()
         else:
             st.error("Enter a valid deposit amount.")
 
@@ -161,7 +167,7 @@ def user_dashboard():
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Sent ${payment_amount:.2f} to {recipient} successfully!")
-            st.session_state['rerun_needed'] = True
+            st.experimental_rerun()
 
     st.subheader("Transaction History")
     if user_data['transactions']:
@@ -200,27 +206,18 @@ def logout_sidebar():
                 st.session_state['username'] = None
                 st.session_state['is_banker'] = False
                 st.session_state['login_time'] = None
+                st.session_state['mode'] = 'login'
                 st.success("Logged out successfully.")
-                st.session_state['rerun_needed'] = True
+                st.experimental_rerun()
 
 def main():
     logout_sidebar()
 
-    if st.session_state['rerun_needed']:
-        st.session_state['rerun_needed'] = False
-        st.experimental_rerun()
-
     if not st.session_state['logged_in']:
         if st.session_state['mode'] == 'login':
             login()
-            if st.button("Go to Register"):
-                st.session_state['mode'] = 'register'
-                st.session_state['rerun_needed'] = True
         elif st.session_state['mode'] == 'register':
             register()
-            if st.button("Go to Login"):
-                st.session_state['mode'] = 'login'
-                st.session_state['rerun_needed'] = True
     else:
         if st.session_state['is_banker']:
             banker_dashboard()
