@@ -164,22 +164,38 @@ def user_dashboard():
         st.info("No transactions yet.")
 
 def banker_dashboard():
-    st.title("🏛️ Banker Dashboard")
-    st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
+    st.title("🏛️ Banker Dashboard - Overview")
 
+    total_balance = 0.0
+    combined_transactions = []
+
+    # Aggregate balances and transactions from all users
     for username, data in st.session_state['users_db'].items():
-        st.markdown("---")
-        st.markdown(f"👤 **User:** {username}")
-        st.markdown(f"Name: {data['first_name']} {data['last_name']}")
-        st.markdown(f"Account Number: {data['account_number']}")
-        st.markdown(f"Balance: ${data['balance']:.2f}")
-        st.markdown("📜 **Transactions**")
-        if data['transactions']:
-            for txn in reversed(data['transactions']):
-                st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | ${txn['amount']:.2f}")
-        else:
-            st.write("No transactions.")
+        total_balance += data['balance']
+        for txn in data['transactions']:
+            combined_transactions.append({
+                "username": username,
+                "date": txn["date"],
+                "type": txn["type"],
+                "label": txn["label"],
+                "amount": txn["amount"]
+            })
 
+    # Display admin account summary
+    st.markdown("### 👤 User: admin")
+    st.markdown("**Name:** Bank of Tanakala")
+    st.markdown("**Account Number:** BOT1001")
+    st.markdown(f"**Balance:** ${total_balance:.2f}")
+
+    st.markdown("### 📜 All Transactions")
+    if combined_transactions:
+        # Sort transactions by date (descending)
+        combined_transactions.sort(key=lambda x: x["date"], reverse=True)
+        for txn in combined_transactions:
+            st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | "
+                     f"${txn['amount']:.2f} | User: {txn['username']}")
+    else:
+        st.info("No transactions.")
 # -------------------- Sidebar Logout --------------------
 def sidebar():
     with st.sidebar:
