@@ -1,37 +1,37 @@
 import streamlit as st
 from datetime import datetime, date
 
-# Initialize session state keys to avoid errors after rerun
-if 'users_db' not in st.session_state:
-    st.session_state['users_db'] = {
-        "admin": {
-            "password": "admin123",
-            "first_name": "Bank of",
-            "last_name": "Tanakala",
-            "address": "123 Nth Avenue, New York City",
-            "country": "United States",
-            "state": "New York",
-            "zip": "10004",
-            "ssn": "111-22-3333",
-            "birthday": "1970-01-01",
-            "timezone": "(GMT-05:00) Eastern Time (US & Canada)",
-            "balance": 0.0,
-            "transactions": [],
-            "account_number": "BOT1001"
-        }
-    }
-    st.session_state['last_account_number'] = 1001
+# --- Initialize session state keys ---
+for key in ['logged_in', 'username', 'is_banker', 'login_time', 'mode', 'users_db', 'last_account_number']:
+    if key not in st.session_state:
+        if key == 'users_db':
+            st.session_state[key] = {
+                "admin": {
+                    "password": "admin123",
+                    "first_name": "Bank of",
+                    "last_name": "Tanakala",
+                    "address": "123 Nth Avenue, New York City",
+                    "country": "United States",
+                    "state": "New York",
+                    "zip": "10004",
+                    "ssn": "111-22-3333",
+                    "birthday": "1970-01-01",
+                    "timezone": "(GMT-05:00) Eastern Time (US & Canada)",
+                    "balance": 0.0,
+                    "transactions": [],
+                    "account_number": "BOT1001"
+                }
+            }
+        elif key == 'last_account_number':
+            st.session_state[key] = 1001
+        elif key == 'mode':
+            st.session_state[key] = 'login'
+        elif key == 'logged_in':
+            st.session_state[key] = False
+        else:
+            st.session_state[key] = None
 
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-    st.session_state['username'] = None
-    st.session_state['is_banker'] = False
-    st.session_state['login_time'] = None
-
-if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'
-
-# --- Logout Sidebar ---
+# --- Sidebar for logout and info ---
 if st.session_state.get('logged_in', False):
     with st.sidebar:
         st.markdown("## ⚙️ Settings")
@@ -42,10 +42,9 @@ if st.session_state.get('logged_in', False):
             st.session_state['username'] = None
             st.session_state['is_banker'] = False
             st.session_state['login_time'] = None
-            st.success("Logged out successfully.")
             st.experimental_rerun()
 
-# --- Register function ---
+# --- Registration page ---
 def register():
     st.title("Bank of Tanakala - Register")
 
@@ -72,9 +71,9 @@ def register():
         elif not username or not password:
             st.error("Username and password cannot be empty.")
         else:
-            # Generate new account number automatically
+            # Generate new account number BOT1002, BOT1003, etc.
             st.session_state['last_account_number'] += 1
-            account_number = f"BOT{st.session_state['last_account_number']}"
+            account_number = f"BOT{st.session_state['last_account_number']:04d}"
 
             st.session_state['users_db'][username] = {
                 "password": password,
@@ -94,7 +93,7 @@ def register():
             st.success(f"Registration successful! Your account number is {account_number}. You can now login.")
             st.session_state['mode'] = "login"
 
-# --- Login function ---
+# --- Login page ---
 def login():
     st.title("Bank of Tanakala - Login")
 
@@ -102,12 +101,13 @@ def login():
     password = st.text_input("Password", type="password", key="login_password")
 
     if st.button("Sign In"):
-        if username in st.session_state['users_db'] and st.session_state['users_db'][username]['password'] == password:
+        users = st.session_state['users_db']
+        if username in users and users[username]['password'] == password:
             st.session_state['logged_in'] = True
             st.session_state['username'] = username
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state['is_banker'] = (username == "admin")
-            st.experimental_rerun()  # reload app to show dashboard immediately
+            st.experimental_rerun()
         else:
             st.error("Invalid username or password")
 
@@ -118,19 +118,20 @@ def dashboard():
     user_data = st.session_state['users_db'][st.session_state['username']]
 
     st.markdown(f"🕒 **Login Time:** {st.session_state.get('login_time', 'N/A')}")
-    st.markdown(f"💳 **Account Number:** {user_data['account_number']}")
 
     st.subheader("Account Overview")
+    st.markdown(f"**Account Number:** {user_data['account_number']}")
     st.write(f"Balance: ${user_data['balance']:.2f}")
 
     st.subheader("Transaction History")
     if user_data['transactions']:
         for txn in user_data['transactions']:
-            st.write(f"{txn['date']} - {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
+            date_str = txn.get('date', 'N/A')
+            st.write(f"{date_str} | {txn['type'].capitalize()} | {txn['label']} | ${txn['amount']:.2f}")
     else:
         st.write("No transactions yet.")
 
-    # --- Deposit Money ---
+    # Deposit Money
     st.subheader("Deposit Money")
     deposit_amount = st.number_input("Amount to deposit", min_value=0.0, step=0.01, format="%.2f")
     if st.button("Deposit"):
@@ -140,14 +141,14 @@ def dashboard():
                 "type": "credit",
                 "amount": deposit_amount,
                 "label": "Deposit",
-                "date": datetime.now().strftime("%b %d, %Y %H:%M")
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Deposited ${deposit_amount:.2f} successfully!")
             st.experimental_rerun()
         else:
             st.error("Enter a valid deposit amount.")
 
-    # --- Send Payment ---
+    # Send Payment
     st.subheader("Send Payment")
     recipient = st.text_input("Recipient username", key="recipient_input")
     payment_amount = st.number_input("Amount to send", min_value=0.0, step=0.01, format="%.2f", key="payment_amount")
@@ -167,7 +168,7 @@ def dashboard():
                 "type": "debit",
                 "amount": payment_amount,
                 "label": f"Payment to {recipient}",
-                "date": datetime.now().strftime("%b %d, %Y %H:%M")
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             # Add to recipient
             recipient_data = st.session_state['users_db'][recipient]
@@ -176,7 +177,7 @@ def dashboard():
                 "type": "credit",
                 "amount": payment_amount,
                 "label": f"Received from {st.session_state['username']}",
-                "date": datetime.now().strftime("%b %d, %Y %H:%M")
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Sent ${payment_amount:.2f} to {recipient} successfully!")
             st.experimental_rerun()
@@ -184,6 +185,7 @@ def dashboard():
 # --- Banker dashboard ---
 def banker_dashboard():
     st.title("🏛️ Banker Dashboard - User Overviews")
+
     st.markdown(f"🕒 **Login Time:** {st.session_state.get('login_time', 'N/A')}")
     st.markdown(f"👤 **ADMIN - Appala T**")
 
@@ -197,7 +199,7 @@ def banker_dashboard():
         st.markdown("📜 **Transaction History**")
         if data['transactions']:
             for txn in data['transactions']:
-                st.write(f"{txn['date']} • {txn['type'].capitalize()}: ${txn['amount']} - {txn['label']}")
+                st.write(f"• {txn.get('date', 'N/A')} | {txn['type'].capitalize()} | {txn['label']} | ${txn['amount']:.2f}")
         else:
             st.write("No transactions.")
 
