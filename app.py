@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, date
 
-# Initialize session state keys
+# Initialize session state keys once
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {
         "admin": {
@@ -31,8 +31,10 @@ if 'is_banker' not in st.session_state:
     st.session_state['is_banker'] = False
 if 'next_account_num' not in st.session_state:
     st.session_state['next_account_num'] = 1002  # start after BOT1001
+if 'rerun_needed' not in st.session_state:
+    st.session_state['rerun_needed'] = False
 if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'
+    st.session_state['mode'] = 'login'  # default mode
 
 def generate_account_number():
     acc_num = f"BOT{st.session_state['next_account_num']}"
@@ -91,7 +93,6 @@ def login():
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
 
-    login_success = False
     if st.button("Sign In"):
         if username in st.session_state['users_db'] and st.session_state['users_db'][username]['password'] == password:
             st.session_state['logged_in'] = True
@@ -99,10 +100,13 @@ def login():
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state['is_banker'] = (username == "admin")
             st.success(f"Welcome, {username}!")
-            login_success = True
+            st.session_state['rerun_needed'] = True
         else:
             st.error("Invalid username or password")
-    if login_success:
+
+    # Trigger rerun after button is processed
+    if st.session_state.get('rerun_needed', False):
+        st.session_state['rerun_needed'] = False
         st.experimental_rerun()
 
 def user_dashboard():
@@ -205,25 +209,25 @@ def logout_sidebar():
                 st.success("Logged out successfully.")
                 st.experimental_rerun()
 
-# ----------- MAIN APP LOGIC -----------
+def main():
+    logout_sidebar()
 
-logout_sidebar()
+    if not st.session_state['logged_in']:
+        if st.session_state.get('mode', 'login') == 'login':
+            login()
+            if st.button("Go to Register"):
+                st.session_state['mode'] = 'register'
+                st.experimental_rerun()
+        else:
+            register()
+            if st.button("Go to Login"):
+                st.session_state['mode'] = 'login'
+                st.experimental_rerun()
+    else:
+        if st.session_state['is_banker']:
+            banker_dashboard()
+        else:
+            user_dashboard()
 
-if st.session_state.get('logged_in', False):
-    # Show dashboard based on user role
-    if st.session_state.get('is_banker', False):
-        banker_dashboard()
-    else:
-        user_dashboard()
-else:
-    # If not logged in, show login or register page based on mode
-    if st.session_state.get('mode', 'login') == 'login':
-        login()
-        if st.button("Create an account"):
-            st.session_state['mode'] = 'register'
-            st.experimental_rerun()
-    else:
-        register()
-        if st.button("Back to Login"):
-            st.session_state['mode'] = 'login'
-            st.experimental_rerun()
+if __name__ == "__main__":
+    main()
