@@ -1,13 +1,13 @@
 import streamlit as st
 from datetime import datetime, date
 
-# Initialize session state keys once
+# Initialize session state keys
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {
         "admin": {
             "password": "admin123",
-            "first_name": "Appala",
-            "last_name": "T",
+            "first_name": "Bank of",
+            "last_name": "Tanakala",
             "address": "123 Nth Avenue, New York City",
             "country": "United States",
             "state": "New York",
@@ -20,7 +20,6 @@ if 'users_db' not in st.session_state:
             "account_number": "BOT1001"
         }
     }
-
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
@@ -32,9 +31,7 @@ if 'is_banker' not in st.session_state:
 if 'next_account_num' not in st.session_state:
     st.session_state['next_account_num'] = 1002  # start after BOT1001
 if 'rerun_needed' not in st.session_state:
-    st.session_state['rerun_needed'] = False
-if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'  # default mode
+    st.session_state['rerun_needed'] = False  # Flag for rerun
 
 def generate_account_number():
     acc_num = f"BOT{st.session_state['next_account_num']}"
@@ -85,7 +82,6 @@ def register():
             }
             st.success(f"Registration successful! Your account number is {account_number}. You can now login.")
             st.session_state['mode'] = "login"
-            st.experimental_rerun()
 
 def login():
     st.title("Bank of Tanakala - Login")
@@ -100,11 +96,10 @@ def login():
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.session_state['is_banker'] = (username == "admin")
             st.success(f"Welcome, {username}!")
-            st.session_state['rerun_needed'] = True
+            st.session_state['rerun_needed'] = True  # Set rerun flag instead of rerunning now
         else:
             st.error("Invalid username or password")
 
-    # Trigger rerun after button is processed
     if st.session_state.get('rerun_needed', False):
         st.session_state['rerun_needed'] = False
         st.experimental_rerun()
@@ -132,9 +127,13 @@ def user_dashboard():
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Deposited ${deposit_amount:.2f} successfully!")
-            st.experimental_rerun()
+            st.session_state['rerun_needed'] = True
         else:
             st.error("Enter a valid deposit amount.")
+
+    if st.session_state.get('rerun_needed', False):
+        st.session_state['rerun_needed'] = False
+        st.experimental_rerun()
 
     st.subheader("Send Payment")
     recipient = st.text_input("Recipient username", key="recipient_input")
@@ -167,7 +166,11 @@ def user_dashboard():
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             st.success(f"Sent ${payment_amount:.2f} to {recipient} successfully!")
-            st.experimental_rerun()
+            st.session_state['rerun_needed'] = True
+
+    if st.session_state.get('rerun_needed', False):
+        st.session_state['rerun_needed'] = False
+        st.experimental_rerun()
 
     st.subheader("Transaction History")
     if user_data['transactions']:
@@ -207,23 +210,28 @@ def logout_sidebar():
                 st.session_state['is_banker'] = False
                 st.session_state['login_time'] = None
                 st.success("Logged out successfully.")
-                st.experimental_rerun()
+                st.session_state['rerun_needed'] = True
+
+    if st.session_state.get('rerun_needed', False):
+        st.session_state['rerun_needed'] = False
+        st.experimental_rerun()
 
 def main():
-    logout_sidebar()
+    # Sidebar for mode switching
+    if 'mode' not in st.session_state:
+        st.session_state['mode'] = 'login'
 
     if not st.session_state['logged_in']:
-        if st.session_state.get('mode', 'login') == 'login':
+        # Show register or login based on mode
+        mode = st.sidebar.radio("Mode", options=["login", "register"])
+        st.session_state['mode'] = mode
+
+        if mode == "login":
             login()
-            if st.button("Go to Register"):
-                st.session_state['mode'] = 'register'
-                st.experimental_rerun()
         else:
             register()
-            if st.button("Go to Login"):
-                st.session_state['mode'] = 'login'
-                st.experimental_rerun()
     else:
+        logout_sidebar()
         if st.session_state['is_banker']:
             banker_dashboard()
         else:
