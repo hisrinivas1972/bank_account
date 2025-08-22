@@ -156,7 +156,13 @@ def user_dashboard():
     st.markdown(f"**Balance:** `${user['balance']:.2f}`")
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
 
-    tabs = st.tabs(["💰 Deposit", "📤 Send Money"])
+    # Default tab index set to 2 for Transaction History
+    tabs = st.tabs(["💰 Deposit", "📤 Send Money", "📜 Transaction History"])
+    selected_tab = st.experimental_get_query_params().get("tab", [2])[0]
+
+    # Because Streamlit tabs do not support default selected tab natively, use a workaround:
+    # We rely on user to click tabs normally.
+    # For UX, we just arrange the tabs, Transaction History last.
 
     with tabs[0]:
         deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit_amount")
@@ -171,7 +177,6 @@ def user_dashboard():
             st.success(f"${deposit:.2f} deposited successfully!")
 
     with tabs[1]:
-        # Dropdown with all users except self
         recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
         if recipients:
             recipient = st.selectbox("Recipient Username", recipients)
@@ -205,15 +210,16 @@ def user_dashboard():
                 })
                 st.success(f"${amount:.2f} sent to {recipient}.")
 
-    st.subheader("📜 Transaction History")
-    if user['transactions']:
-        lines = ["Date    | Type     | Account       | Label                    |    Amount",
-                 "-" * 75]
-        for txn in reversed(user['transactions']):
-            lines.append(format_transaction(txn, user['account_number']))
-        st.code("\n".join(lines))
-    else:
-        st.info("No transactions yet.")
+    with tabs[2]:
+        st.subheader("📜 Transaction History")
+        if user['transactions']:
+            lines = ["Date    | Type     | Account       | Label                    |    Amount",
+                     "-" * 75]
+            for txn in reversed(user['transactions']):
+                lines.append(format_transaction(txn, user['account_number']))
+            st.code("\n".join(lines))
+        else:
+            st.info("No transactions yet.")
 
 def banker_dashboard():
     st.title("🏛️ Banker Dashboard - Overview")
