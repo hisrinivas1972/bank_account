@@ -30,10 +30,6 @@ if 'is_banker' not in st.session_state:
     st.session_state['is_banker'] = False
 if 'login_time' not in st.session_state:
     st.session_state['login_time'] = None
-if 'mode' not in st.session_state:
-    st.session_state['mode'] = 'login'
-if 'selected_tab' not in st.session_state:
-    st.session_state['selected_tab'] = 2  # default tab index (Transaction History)
 
 # -------------------- Helpers --------------------
 def generate_account_number():
@@ -110,7 +106,8 @@ def register():
                 "account_number": acc_number
             }
             st.success(f"Registered successfully! Your account number is {acc_number}. Please login.")
-            st.session_state['mode'] = 'login'
+            # Switch back to login mode after registration
+            st.experimental_rerun()
 
 def login():
     st.title("🏦 Bank of Tanakala - Login")
@@ -125,39 +122,40 @@ def login():
             st.session_state['username'] = username
             st.session_state['is_banker'] = (username == 'admin')
             st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.experimental_rerun()
         else:
             st.error("Invalid credentials.")
 
 def user_dashboard():
     user = st.session_state['users_db'][st.session_state['username']]
     st.title(f"👋 Welcome, {user['first_name']} {user['last_name']}!")
-
     st.markdown(f"**Account Number:** `{user['account_number']}`")
     st.markdown(f"**Balance:** `${user['balance']:.2f}`")
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
 
     tabs = ["💰 Deposit", "📤 Send Money", "📜 Transaction History"]
 
-    # Read query params once on first run to sync tab
-    query_params = st.query_params
-    if 'tab' in query_params:
+    # Initialize selected_tab from query params on first run
+    if "selected_tab" not in st.session_state:
+        query_params = st.query_params
+        tab_from_query = query_params.get("tab", ["2"])[0]  # default Transaction History tab index = 2
         try:
-            tab_index = int(query_params['tab'][0])
-            if tab_index in range(len(tabs)):
-                st.session_state['selected_tab'] = tab_index
+            tab_index = int(tab_from_query)
+            if tab_index not in range(len(tabs)):
+                tab_index = 2
         except Exception:
-            pass
+            tab_index = 2
+        st.session_state.selected_tab = tab_index
 
-    selected_tab = st.radio("Navigate", tabs, index=st.session_state['selected_tab'])
+    # on_change callback to update query params
+    def on_tab_change():
+        st.experimental_set_query_params(tab=str(st.session_state.selected_tab))
 
-    # Update session state if tab changed
-    new_tab_index = tabs.index(selected_tab)
-    if st.session_state['selected_tab'] != new_tab_index:
-        st.session_state['selected_tab'] = new_tab_index
+    selected_tab = st.radio("Navigate", tabs, index=st.session_state.selected_tab,
+                           key="selected_tab", on_change=on_tab_change)
 
     if selected_tab == "💰 Deposit":
-        st.subheader("💰 Deposit")
-        deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit_amount")
+        deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01)
         if st.button("Deposit"):
             user['balance'] += deposit
             user['transactions'].append({
@@ -169,7 +167,7 @@ def user_dashboard():
             st.success(f"${deposit:.2f} deposited successfully!")
 
     elif selected_tab == "📤 Send Money":
-        st.subheader("📤 Send Money")
+        # Dropdown with all users except self
         recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
         if recipients:
             recipient = st.selectbox("Recipient Username", recipients)
@@ -197,17 +195,14 @@ def user_dashboard():
                     })
                     st.success(f"${amount:.2f} sent to {recipient}.")
         else:
-            st.info("No other users available to send money.")
+            st.info("No other users to send money to.")
 
-    else:  # Transaction History
+    else:  # Transaction History tab
         st.subheader("📜 Transaction History")
         if user['transactions']:
             lines = ["Date    | Type     | Account       | Label                    |    Amount",
                      "-" * 75]
             for txn in reversed(user['transactions']):
-                # For transaction history, show proper account number:
-                # credit: account number is the user's account
-                # debit: same
                 lines.append(format_transaction(txn, user['account_number']))
             st.code("\n".join(lines))
         else:
@@ -225,13 +220,15 @@ def banker_dashboard():
         for txn in data['transactions']:
             label = txn["label"]
 
-            # Enrich label with account number for clarity
+            # Enrich label with account number
             if "to" in label:
+                # Sent to someone
                 recipient_username = label.split("to")[-1].strip()
                 recipient_data = st.session_state['users_db'].get(recipient_username)
                 recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
                 label = f"Sent to {recipient_username} ({recipient_acc})"
             elif "from" in label:
+                # Received from someone
                 sender_username = label.split("from")[-1].strip()
                 sender_data = st.session_state['users_db'].get(sender_username)
                 sender_acc = sender_data['account_number'] if sender_data else "N/A"
@@ -269,9 +266,7 @@ def main():
     st.sidebar.title("Bank of Tanakala")
     if not st.session_state['logged_in']:
         mode = st.sidebar.radio("Choose Option", ("Login", "Register"))
-        st.session_state['mode'] = mode.lower()
-
-        if st.session_state['mode'] == 'login':
+        if mode == "Login":
             login()
         else:
             register()
@@ -279,15 +274,13 @@ def main():
         st.sidebar.write(f"Logged in as: {st.session_state['username']}")
         if st.sidebar.button("Logout"):
             logout()
+            st.experimental_rerun()
             return
 
         if st.session_state['is_banker']:
             banker_dashboard()
         else:
             user_dashboard()
-
-        # **Set query params once here**
-        st.experimental_set_query_params(tab=str(st.session_state['selected_tab']))
 
 if __name__ == "__main__":
     main()
