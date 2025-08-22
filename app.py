@@ -1,8 +1,9 @@
 import streamlit as st
 from datetime import datetime
+import pandas as pd
 
 def main():
-    # Sample user data (you can replace this with your real DB)
+    # Sample user data (replace with real DB if needed)
     if "users_db" not in st.session_state:
         st.session_state.users_db = {
             "sri1": {
@@ -38,31 +39,34 @@ def user_dashboard():
 
     tabs = ["💰 Deposit", "📤 Send Money", "📜 Transaction History"]
 
-    # Read tab from query params or default to "📜 Transaction History"
-    query_params = st.experimental_get_query_params()  # This is still the current way for getting query params
+    # Use new API to get query params
+    query_params = st.query_params
     tab_from_url = query_params.get("tab", [None])[0]
 
     if "selected_tab" not in st.session_state:
+        # Defensive check: set default if invalid or missing
         if tab_from_url in tabs:
             st.session_state.selected_tab = tab_from_url
         else:
+            st.session_state.selected_tab = "📜 Transaction History"
+    else:
+        # If selected_tab set but not in tabs (can happen on code reload)
+        if st.session_state.selected_tab not in tabs:
             st.session_state.selected_tab = "📜 Transaction History"
 
     def on_tab_change():
         # Update URL query params with the selected tab string
         st.experimental_set_query_params(tab=st.session_state.selected_tab)
 
-    # Use the selected tab string as the value, not the index
     selected_tab = st.radio(
         "Navigate",
-        tabs,
+        options=tabs,
         index=tabs.index(st.session_state.selected_tab),
         key="selected_tab",
         on_change=on_tab_change,
         horizontal=True,
     )
 
-    # Tab content
     if selected_tab == "💰 Deposit":
         deposit_amount = st.number_input("Amount to deposit", min_value=0.01, step=0.01, format="%.2f")
         if st.button("Deposit"):
@@ -113,10 +117,7 @@ def user_dashboard():
     else:  # Transaction History
         st.subheader("Transaction History")
         if user['transactions']:
-            # Show transactions in a table
-            import pandas as pd
             df = pd.DataFrame(user['transactions'])
-            # Format amount with + or - sign
             df['Amount'] = df['amount'].apply(lambda x: f"+${x:.2f}" if x > 0 else f"-${-x:.2f}")
             df_display = df[['date', 'type', 'label', 'Amount']]
             df_display.columns = ['Date', 'Type', 'Label', 'Amount']
