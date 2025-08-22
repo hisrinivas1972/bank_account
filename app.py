@@ -20,6 +20,7 @@ if 'users_db' not in st.session_state:
             "account_number": "BOT1001"
         }
     }
+
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
@@ -33,12 +34,10 @@ if 'next_account_num' not in st.session_state:
 if 'mode' not in st.session_state:
     st.session_state['mode'] = 'login'
 
-
 def generate_account_number():
     acc_num = f"BOT{st.session_state['next_account_num']}"
     st.session_state['next_account_num'] += 1
     return acc_num
-
 
 def register():
     st.title("Bank of Tanakala - Register")
@@ -86,7 +85,6 @@ def register():
             st.session_state['mode'] = "login"
             st.experimental_rerun()
 
-
 def login():
     st.title("Bank of Tanakala - Login")
 
@@ -106,7 +104,6 @@ def login():
             st.error("Invalid username or password")
     if login_success:
         st.experimental_rerun()
-
 
 def user_dashboard():
     st.title(f"Welcome to Bank of Tanakala, {st.session_state['username']}")
@@ -175,7 +172,6 @@ def user_dashboard():
     else:
         st.write("No transactions yet.")
 
-
 def banker_dashboard():
     st.title("🏛️ Banker Dashboard - User Overviews")
     st.markdown(f"🕒 **Login Time:** {st.session_state.get('login_time', 'N/A')}")
@@ -195,7 +191,6 @@ def banker_dashboard():
         else:
             st.write("No transactions.")
 
-
 def logout_sidebar():
     if st.session_state.get('logged_in', False):
         with st.sidebar:
@@ -210,9 +205,25 @@ def logout_sidebar():
                 st.success("Logged out successfully.")
                 st.experimental_rerun()
 
+# ----------- MAIN APP LOGIC -----------
 
-# Main app logic
 logout_sidebar()
 
-col1, col2 = st.columns(2)
-with col1:
+if st.session_state.get('logged_in', False):
+    # Show dashboard based on user role
+    if st.session_state.get('is_banker', False):
+        banker_dashboard()
+    else:
+        user_dashboard()
+else:
+    # If not logged in, show login or register page based on mode
+    if st.session_state.get('mode', 'login') == 'login':
+        login()
+        if st.button("Create an account"):
+            st.session_state['mode'] = 'register'
+            st.experimental_rerun()
+    else:
+        register()
+        if st.button("Back to Login"):
+            st.session_state['mode'] = 'login'
+            st.experimental_rerun()
