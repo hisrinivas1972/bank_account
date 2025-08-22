@@ -244,7 +244,7 @@ def banker_dashboard():
     st.markdown("### 📜 All Transactions")
     if combined_transactions:
         combined_transactions.sort(key=lambda x: x["date"], reverse=True)
-        header = "Date   | Type     | Account      | Label                   |    Amount | User"
+        header = "Date   | Type     | Account      | Label                   |    User | Amount"
         separator = "-" * len(header)
         st.text(header)
         st.text(separator)
