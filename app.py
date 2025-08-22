@@ -6,8 +6,8 @@ if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {
         "admin": {
             "password": "admin123",
-            "first_name": "Appala",
-            "last_name": "T",
+            "first_name": "Bank of",
+            "last_name": "Tanakala",
             "address": "123 Nth Avenue, New York City",
             "country": "United States",
             "state": "New York",
