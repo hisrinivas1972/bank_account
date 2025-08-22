@@ -46,39 +46,17 @@ def logout():
     st.session_state['login_time'] = None
     st.success("Logged out successfully.")
 
-def format_transaction(txn, user_acc_num):
+def format_transaction(txn, account_number):
     dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
     date_str = dt.strftime("%b %d")
 
     type_icon = "●"
     type_str = f"{type_icon} {txn['type'].capitalize()}"
     sign = "+" if txn['type'] == "credit" else "-"
-
-    # Fix account number display based on transaction type and label
-    label = txn['label']
-    account_number = user_acc_num  # Default to user account number
-
-    # For transactions involving other users, display correct account number
-    if txn['type'] == "debit" and label.startswith("Sent to"):
-        # Extract recipient username
-        recipient_username = label.split("Sent to")[-1].strip()
-        # Remove account number if exists in label
-        if "(" in recipient_username:
-            recipient_username = recipient_username.split("(")[0].strip()
-        recipient_data = st.session_state['users_db'].get(recipient_username)
-        if recipient_data:
-            account_number = recipient_data['account_number']
-    elif txn['type'] == "credit" and label.startswith("Received from"):
-        sender_username = label.split("Received from")[-1].strip()
-        if "(" in sender_username:
-            sender_username = sender_username.split("(")[0].strip()
-        sender_data = st.session_state['users_db'].get(sender_username)
-        if sender_data:
-            account_number = sender_data['account_number']
-
     amount_str = f"{sign}${txn['amount']:.2f}"
 
     # Truncate label to max 25 chars
+    label = txn['label']
     if len(label) > 25:
         label = label[:22] + "..."
 
@@ -156,15 +134,27 @@ def user_dashboard():
     st.markdown(f"**Balance:** `${user['balance']:.2f}`")
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
 
-    # Default tab index set to 2 for Transaction History
-    tabs = st.tabs(["💰 Deposit", "📤 Send Money", "📜 Transaction History"])
-    selected_tab = st.experimental_get_query_params().get("tab", [2])[0]
+    # Define tabs
+    tabs = ["💰 Deposit", "📤 Send Money", "📜 Transaction History"]
 
-    # Because Streamlit tabs do not support default selected tab natively, use a workaround:
-    # We rely on user to click tabs normally.
-    # For UX, we just arrange the tabs, Transaction History last.
+    # Get current tab from query params, default to Transaction History (index 2)
+    query_params = st.query_params
+    default_tab = int(query_params.get("tab", [2])[0]) if "tab" in query_params else 2
 
-    with tabs[0]:
+    # Initialize session state for tab if not set
+    if 'selected_tab' not in st.session_state:
+        st.session_state['selected_tab'] = default_tab
+
+    # Radio buttons for tab navigation
+    selected_tab = st.radio("Navigate", tabs, index=st.session_state['selected_tab'])
+
+    # Update session state and URL query params when tab changes
+    if st.session_state['selected_tab'] != tabs.index(selected_tab):
+        st.session_state['selected_tab'] = tabs.index(selected_tab)
+        st.experimental_set_query_params(tab=str(st.session_state['selected_tab']))
+
+    # Deposit Tab
+    if selected_tab == "💰 Deposit":
         deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit_amount")
         if st.button("Deposit", key="deposit_btn"):
             user['balance'] += deposit
@@ -176,7 +166,8 @@ def user_dashboard():
             })
             st.success(f"${deposit:.2f} deposited successfully!")
 
-    with tabs[1]:
+    # Send Money Tab
+    elif selected_tab == "📤 Send Money":
         recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
         if recipients:
             recipient = st.selectbox("Recipient Username", recipients)
@@ -210,7 +201,8 @@ def user_dashboard():
                 })
                 st.success(f"${amount:.2f} sent to {recipient}.")
 
-    with tabs[2]:
+    # Transaction History Tab
+    else:
         st.subheader("📜 Transaction History")
         if user['transactions']:
             lines = ["Date    | Type     | Account       | Label                    |    Amount",
@@ -241,56 +233,48 @@ def banker_dashboard():
                 recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
                 label = f"Sent to {recipient_username} ({recipient_acc})"
             elif "from" in label:
-                # Received from someone
                 sender_username = label.split("from")[-1].strip()
                 sender_data = st.session_state['users_db'].get(sender_username)
                 sender_acc = sender_data['account_number'] if sender_data else "N/A"
                 label = f"Received from {sender_username} ({sender_acc})"
+            # else keep label as is
 
             combined_transactions.append({
-                "username": username,
+                "date": txn['date'],
+                "type": txn['type'],
                 "account_number": account_number,
-                "date": txn["date"],
-                "type": txn["type"],
                 "label": label,
-                "amount": txn["amount"]
+                "amount": txn['amount']
             })
 
-    # Display bank (admin) summary
-    st.markdown("### 👤 User: admin")
-    st.markdown("**Name:** Bank of Tanakala")
-    st.markdown("**Account Number:** BOT1001")
-    st.markdown(f"**Balance:** ${total_balance:.2f}")
+    # Sort all transactions by date descending
+    combined_transactions.sort(key=lambda x: x['date'], reverse=True)
 
-    st.markdown("### 📜 All Transactions")
+    st.markdown(f"**Total Balance of all users:** ${total_balance:.2f}")
 
+    st.subheader("All Users Transaction History")
     if combined_transactions:
-        combined_transactions.sort(key=lambda x: x["date"], reverse=True)
         lines = ["Date    | Type     | Account       | Label                    |    Amount",
                  "-" * 75]
         for txn in combined_transactions:
-            lines.append(format_transaction(txn, txn["account_number"]))
+            lines.append(format_transaction(txn, txn['account_number']))
         st.code("\n".join(lines))
     else:
-        st.info("No transactions.")
+        st.info("No transactions yet.")
 
 # -------------------- Main --------------------
 def main():
-    st.sidebar.title("Bank of Tanakala")
     if not st.session_state['logged_in']:
-        mode = st.sidebar.radio("Choose Option", ("Login", "Register"))
-        st.session_state['mode'] = mode.lower()
-
         if st.session_state['mode'] == 'login':
             login()
+            if st.button("Register"):
+                st.session_state['mode'] = 'register'
         else:
             register()
+            if st.button("Back to Login"):
+                st.session_state['mode'] = 'login'
     else:
-        st.sidebar.write(f"Logged in as: {st.session_state['username']}")
-        if st.sidebar.button("Logout"):
-            logout()
-            return
-
+        st.sidebar.button("Logout", on_click=logout)
         if st.session_state['is_banker']:
             banker_dashboard()
         else:
