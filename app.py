@@ -46,6 +46,26 @@ def logout():
     st.session_state['login_time'] = None
     st.success("Logged out successfully.")
 
+def format_transaction(txn, account_number):
+    # Format date as "Aug 22"
+    dt = datetime.strptime(txn['date'], "%Y-%m-%d %H:%M:%S")
+    date_str = dt.strftime("%b %d")
+    
+    # Icon/bullet for type
+    type_icon = "●"
+    type_str = f"{type_icon} {txn['type'].capitalize()}"
+    
+    # Label (truncate/pad for alignment)
+    label = txn['label']
+    label = (label[:15] + '..') if len(label) > 17 else label.ljust(17)
+    
+    # Amount with sign and currency format
+    sign = "+" if txn['type'] == "credit" else "-"
+    amount_str = f"{sign}${txn['amount']:.2f}"
+    
+    # Return formatted string
+    return f"{date_str}  |  {type_str:<8}  |  {account_number:<12}  |  {label}  |  {amount_str:>8}"
+
 # -------------------- Pages --------------------
 def register():
     st.title("🏦 Bank of Tanakala - Register")
@@ -117,7 +137,7 @@ def user_dashboard():
     st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
 
     st.subheader("💰 Deposit")
-    deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit_amount")
+    deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01)
     if st.button("Deposit"):
         user['balance'] += deposit
         user['transactions'].append({
@@ -129,49 +149,40 @@ def user_dashboard():
         st.success(f"${deposit:.2f} deposited successfully!")
 
     st.subheader("📤 Send Money")
-
-    # Prepare recipient options (exclude self)
-    recipient_options = []
-    for uname, udata in st.session_state['users_db'].items():
-        if uname != st.session_state['username']:
-            recipient_options.append(f"{uname} ({udata['account_number']})")
-    
-    recipient_selection = st.selectbox("Recipient Username and Account", options=recipient_options)
-
+    # Dropdown to select recipient usernames except current user
+    recipients = [u for u in st.session_state['users_db'].keys() if u != st.session_state['username']]
+    recipient = st.selectbox("Recipient Username", recipients)
     amount = st.number_input("Amount to send", min_value=0.01, step=0.01, key="send_amount")
     if st.button("Send"):
-        if not recipient_selection:
-            st.error("Please select a recipient.")
+        if recipient not in st.session_state['users_db']:
+            st.error("Recipient not found.")
+        elif user['balance'] < amount:
+            st.error("Insufficient balance.")
         else:
-            recipient_username = recipient_selection.split()[0]  # Extract username before space (before '(')
-            if recipient_username not in st.session_state['users_db']:
-                st.error("Recipient not found.")
-            elif user['balance'] < amount:
-                st.error("Insufficient balance.")
-            else:
-                # Debit from sender
-                user['balance'] -= amount
-                user['transactions'].append({
-                    "type": "debit",
-                    "amount": amount,
-                    "label": f"Sent to {recipient_username}",
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                # Credit to recipient
-                recipient_user = st.session_state['users_db'][recipient_username]
-                recipient_user['balance'] += amount
-                recipient_user['transactions'].append({
-                    "type": "credit",
-                    "amount": amount,
-                    "label": f"Received from {st.session_state['username']}",
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                st.success(f"${amount:.2f} sent to {recipient_username}.")
+            user['balance'] -= amount
+            user['transactions'].append({
+                "type": "debit",
+                "amount": amount,
+                "label": f"Sent to {recipient}",
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            recipient_user = st.session_state['users_db'][recipient]
+            recipient_user['balance'] += amount
+            recipient_user['transactions'].append({
+                "type": "credit",
+                "amount": amount,
+                "label": f"Received from {st.session_state['username']}",
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            st.success(f"${amount:.2f} sent to {recipient}.")
 
     st.subheader("📜 Transaction History")
     if user['transactions']:
+        # Header
+        st.text("Date  |  Type     |  Account      |  Label           |  Amount")
+        st.text("-" * 70)
         for txn in reversed(user['transactions']):
-            st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | ${txn['amount']:.2f}")
+            st.text(format_transaction(txn, user['account_number']))
     else:
         st.info("No transactions yet.")
 
@@ -187,14 +198,14 @@ def banker_dashboard():
         for txn in data['transactions']:
             label = txn["label"]
 
-            # Enrich label with account number if it has username references
-            if "Sent to" in label:
-                recipient_username = label.split("Sent to")[-1].strip()
+            # Enrich label with account number
+            if "to" in label:
+                recipient_username = label.split("to")[-1].strip()
                 recipient_data = st.session_state['users_db'].get(recipient_username)
                 recipient_acc = recipient_data['account_number'] if recipient_data else "N/A"
                 label = f"Sent to {recipient_username} ({recipient_acc})"
-            elif "Received from" in label:
-                sender_username = label.split("Received from")[-1].strip()
+            elif "from" in label:
+                sender_username = label.split("from")[-1].strip()
                 sender_data = st.session_state['users_db'].get(sender_username)
                 sender_acc = sender_data['account_number'] if sender_data else "N/A"
                 label = f"Received from {sender_username} ({sender_acc})"
@@ -217,9 +228,11 @@ def banker_dashboard():
     st.markdown("### 📜 All Transactions")
     if combined_transactions:
         combined_transactions.sort(key=lambda x: x["date"], reverse=True)
+        # Header
+        st.text("Date  |  Type     |  Account      |  Label           |  Amount")
+        st.text("-" * 70)
         for txn in combined_transactions:
-            st.write(f"{txn['date']} | {txn['type'].capitalize()} | {txn['label']} | "
-                     f"${txn['amount']:.2f} | User: {txn['username']} ({txn['account_number']})")
+            st.text(format_transaction(txn, txn['account_number']))
     else:
         st.info("No transactions.")
 
