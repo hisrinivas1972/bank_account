@@ -198,7 +198,7 @@ def user_dashboard():
         if user['transactions']:
             lines = ["Date    | Type     | Account       | Label                    |    Amount",
                      "-" * 75]
-            for txn in reversed(user['transactions']):
+            for txn in user['transactions']:  # Ordered oldest to newest
                 lines.append(format_transaction(txn, user['account_number']))
             st.code("\n".join(lines))
         else:
@@ -243,7 +243,7 @@ def banker_dashboard():
     st.markdown("### 📜 All Transactions")
 
     if combined_transactions:
-        combined_transactions.sort(key=lambda x: x["date"], reverse=True)
+        combined_transactions.sort(key=lambda x: x["date"])  # Chronological
         lines = ["Date    | Type     | Account       | Label                    |    Amount",
                  "-" * 75]
         for txn in combined_transactions:
