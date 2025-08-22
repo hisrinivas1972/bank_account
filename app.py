@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, date
 
-# In-memory user "database" (for demo purposes)
+# Initialize users database and account numbering
 if 'users_db' not in st.session_state:
     st.session_state['users_db'] = {
         "admin": {
@@ -16,9 +16,16 @@ if 'users_db' not in st.session_state:
             "birthday": "1970-01-01",
             "timezone": "(GMT-05:00) Eastern Time (US & Canada)",
             "balance": 0.0,
-            "transactions": []
+            "transactions": [],
+            "account_number": "BOT1001"
         }
     }
+    st.session_state['last_account_number'] = 1001  # track last number assigned
+
+# Function to generate next account number
+def get_next_account_number():
+    st.session_state['last_account_number'] += 1
+    return f"BOT{st.session_state['last_account_number']}"
 
 # --- Universal Logout Sidebar ---
 if st.session_state.get('logged_in', False):
@@ -61,6 +68,8 @@ def register():
         elif not username or not password:
             st.error("Username and password cannot be empty.")
         else:
+            # Assign next account number
+            account_num = get_next_account_number()
             st.session_state['users_db'][username] = {
                 "password": password,
                 "first_name": first_name,
@@ -73,9 +82,10 @@ def register():
                 "birthday": str(birthday),
                 "timezone": timezone,
                 "balance": 0.0,
-                "transactions": []
+                "transactions": [],
+                "account_number": account_num
             }
-            st.success("Registration successful! You can now login.")
+            st.success(f"Registration successful! Your account number is **{account_num}**. You can now login.")
             st.session_state['mode'] = "login"
 
 
@@ -103,6 +113,7 @@ def dashboard():
     user_data = st.session_state['users_db'][st.session_state['username']]
 
     st.markdown(f"🕒 **Login Time:** {st.session_state.get('login_time', 'N/A')}")
+    st.markdown(f"🏦 **Account Number:** {user_data['account_number']}")
 
     st.subheader("Account Overview")
     st.write(f"Balance: ${user_data['balance']:.2f}")
@@ -172,6 +183,7 @@ def banker_dashboard():
     for username, data in st.session_state['users_db'].items():
         full_name = f"{data['first_name']} {data['last_name']}"
         st.markdown(f"---\n👤 **User:** {username}")
+        st.markdown(f"Account Number: {data.get('account_number', 'N/A')}")
         st.markdown(f"Name: {full_name}")
         st.markdown(f"Balance: ${data['balance']:.2f}")
 
