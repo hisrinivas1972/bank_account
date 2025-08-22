@@ -17,6 +17,12 @@ if 'username' not in st.session_state:
 if 'is_banker' not in st.session_state:
     st.session_state['is_banker'] = False
 
+# --- Backfill missing 'date' in old transactions ---
+for user, data in st.session_state['users_db'].items():
+    for txn in data.get("transactions", []):
+        if 'date' not in txn:
+            txn['date'] = datetime.now().strftime("%b %d")
+
 # --- Registration ---
 def register():
     st.title("🏦 Bank of Tanakala - Register")
@@ -98,11 +104,11 @@ def dashboard():
         txn_table = []
         for txn in reversed(user_data['transactions']):
             txn_table.append({
-                "Date": txn['date'],
-                "Type": txn['type'].capitalize(),
+                "Date": txn.get("date", "N/A"),
+                "Type": txn.get("type", "—").capitalize(),
                 "Account": txn.get("account", "—"),
-                "Label": txn['label'],
-                "Amount": f"{'-' if txn['type']=='debit' else '+'}${txn['amount']:.2f}"
+                "Label": txn.get("label", "—"),
+                "Amount": f"{'-' if txn.get('type') == 'debit' else '+'}${txn.get('amount', 0.00):.2f}"
             })
         st.table(txn_table)
     else:
@@ -182,11 +188,11 @@ def banker_dashboard():
                 txn_table = []
                 for txn in reversed(data['transactions']):
                     txn_table.append({
-                        "Date": txn['date'],
-                        "Type": txn['type'].capitalize(),
+                        "Date": txn.get("date", "N/A"),
+                        "Type": txn.get("type", "—").capitalize(),
                         "Account": txn.get("account", "—"),
-                        "Label": txn['label'],
-                        "Amount": f"{'-' if txn['type'] == 'debit' else '+'}${txn['amount']:.2f}"
+                        "Label": txn.get("label", "—"),
+                        "Amount": f"{'-' if txn.get('type') == 'debit' else '+'}${txn.get('amount', 0.00):.2f}"
                     })
                 st.table(txn_table)
             else:
@@ -206,7 +212,7 @@ with col2:
     if st.button("📝 Go to Register"):
         st.session_state['mode'] = 'register'
 
-# --- Main ---
+# --- Routing ---
 if st.session_state['logged_in']:
     if st.session_state['is_banker']:
         banker_dashboard()
