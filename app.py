@@ -56,20 +56,24 @@ def format_transaction(txn, user_account_number):
     amount_str = f"{sign}${txn['amount']:.2f}"
 
     label = txn['label']
-    account_number = user_account_number
+    account_number = user_account_number  # Default: user's account
 
+    # Extract counterparty account number based on label and transaction type
     if txn['type'] == 'debit' and "Sent to" in label:
+        # For debits, show recipient's account number
         recipient_username = label.split("Sent to")[-1].strip().split()[0]
         recipient_data = st.session_state['users_db'].get(recipient_username)
         if recipient_data:
             account_number = recipient_data['account_number']
 
     elif txn['type'] == 'credit' and "Received from" in label:
+        # For credits, show sender's account number
         sender_username = label.split("Received from")[-1].strip().split()[0]
         sender_data = st.session_state['users_db'].get(sender_username)
         if sender_data:
             account_number = sender_data['account_number']
 
+    # Truncate label to max 25 chars
     if len(label) > 25:
         label = label[:22] + "..."
 
@@ -87,11 +91,11 @@ def register():
     st.subheader("Personal Information")
     first_name = st.text_input("First Name")
     last_name = st.text_input("Last Name")
-    address = st.text_input("Address")
-    country = st.text_input("Country")
-    state = st.text_input("State")
-    zip_code = st.text_input("Zip")
-    ssn = st.text_input("SSN")
+    address = st.text_input("Address", value="123 Nth Avenue, New York City")
+    country = st.text_input("Country", value="United States")
+    state = st.text_input("State", value="New York")
+    zip_code = st.text_input("Zip", value="10004")
+    ssn = st.text_input("SSN", value="111-22-3333")
     birthday = st.date_input("Birthday")
     timezone = st.selectbox("Timezone", ["(GMT-05:00) Eastern Time (US & Canada)", "(GMT+00:00) UTC"])
 
@@ -142,34 +146,40 @@ def user_dashboard():
     user = st.session_state['users_db'][st.session_state['username']]
     st.title(f"👋 Welcome, {user['first_name']} {user['last_name']}!")
 
-    st.markdown(f"**Account Number:** `{user['account_number']}`")
-    st.markdown(f"**Balance:** `${user['balance']:.2f}`")
-    st.markdown(f"**Login Time:** `{st.session_state['login_time']}`")
+    # Single line account info with spacing, monospace font
+    account = f"Account Number: {user['account_number']}"
+    balance = f"Current Balance: ${user['balance']:.2f}"
+    login_time = f"Login Time: {st.session_state['login_time']}"
+    info_line = f"{account:<30} {balance:<30} {login_time}"
+    st.code(info_line)
 
     tabs = st.tabs(["💰 Deposit", "📤 Send Money", "📜 Transaction History"])
 
-    with tabs[0]:  # Deposit tab
-        deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, key="deposit_amount")
-        if st.button("Deposit", key="deposit_btn"):
-            user['balance'] += deposit
-            user['transactions'].append({
-                "type": "credit",
-                "amount": deposit,
-                "label": "Deposit",
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            st.success(f"${deposit:.2f} deposited successfully!")
+    with tabs[0]:  # Deposit Tab
+        deposit = st.number_input("Amount to deposit", min_value=0.01, step=0.01, format="%.2f")
+        if st.button("Deposit"):
+            if deposit <= 0:
+                st.error("Enter an amount greater than 0.")
+            else:
+                user['balance'] += deposit
+                user['transactions'].append({
+                    "type": "credit",
+                    "amount": deposit,
+                    "label": "Deposit",
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
+                st.success(f"${deposit:.2f} deposited successfully!")
 
-    with tabs[1]:  # Send Money tab
+    with tabs[1]:  # Send Money Tab
         recipients = [u for u in st.session_state['users_db'] if u != st.session_state['username']]
         if recipients:
-            recipient = st.selectbox("Recipient Username", recipients, key="recipient_select")
+            recipient = st.selectbox("Recipient Username", recipients)
         else:
             st.info("No other users to send money to.")
             recipient = None
 
-        amount = st.number_input("Amount to send", min_value=0.01, step=0.01, key="send_amount")
-        if st.button("Send", key="send_btn"):
+        amount = st.number_input("Amount to send", min_value=0.01, step=0.01, format="%.2f", key="send_amount")
+        if st.button("Send"):
             if recipient is None:
                 st.error("No recipients available.")
             elif recipient not in st.session_state['users_db']:
@@ -194,11 +204,13 @@ def user_dashboard():
                 })
                 st.success(f"${amount:.2f} sent to {recipient}.")
 
-    with tabs[2]:  # Transaction History tab
+    with tabs[2]:  # Transaction History Tab
         if user['transactions']:
             lines = ["Date    | Type     | Account       | Label                    |    Amount",
                      "-" * 75]
-            for txn in user['transactions']:  # Ordered oldest to newest
+            # Sort transactions chronologically (oldest first)
+            sorted_txns = sorted(user['transactions'], key=lambda x: x['date'])
+            for txn in sorted_txns:
                 lines.append(format_transaction(txn, user['account_number']))
             st.code("\n".join(lines))
         else:
@@ -215,6 +227,8 @@ def banker_dashboard():
         account_number = data['account_number']
         for txn in data['transactions']:
             label = txn["label"]
+
+            # Enrich label with account number
             if "to" in label:
                 recipient_username = label.split("to")[-1].strip()
                 recipient_data = st.session_state['users_db'].get(recipient_username)
@@ -235,10 +249,12 @@ def banker_dashboard():
                 "amount": txn["amount"]
             })
 
-    st.markdown("### 👤 User: admin")
-    st.markdown("**Name:** Bank of Tanakala")
-    st.markdown("**Account Number:** BOT1001")
-    st.markdown(f"**Balance:** ${total_balance:.2f}")
+    # Display bank (admin) summary in same one-line format
+    account = f"Account Number: BOT1001"
+    balance = f"Current Balance: ${total_balance:.2f}"
+    login_time = ""  # No login time for admin display here
+    info_line = f"{account:<30} {balance:<30} {login_time}"
+    st.code(info_line)
 
     st.markdown("### 📜 All Transactions")
 
