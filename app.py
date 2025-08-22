@@ -191,4 +191,12 @@ def logout_sidebar():
     if st.session_state.get('logged_in', False):
         with st.sidebar:
             st.markdown("## ⚙️ Settings")
-            st.markdown(f"👤 Logged in as: `{st.session_state.get('username
+            st.markdown(f"👤 Logged in as: `{st.session_state.get('username', '')}`")
+            st.markdown(f"🕒 Login time: `{st.session_state.get('login_time', 'N/A')}`")
+            if st.button("🚪 Log Out"):
+                st.session_state['logged_in'] = False
+                st.session_state['username'] = None
+                st.session_state['is_banker'] = False
+                st.session_state['login_time'] = None
+                st.success("Logged out successfully.")
+                st.experimental_rerun()
